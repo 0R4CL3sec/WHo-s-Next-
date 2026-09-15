@@ -1,0 +1,818 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Who's Next?</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat+Brush&family=Nunito:wght@600;700;800;900&display=swap">
+<style>
+  :root {
+    --board: #1f3b34;
+    --board-deep: #142823;
+    --chalk: #f1efe6;
+    --chalk-dim: #9fb5ab;
+    --line: rgba(241, 239, 230, .14);
+    --dash: rgba(241, 239, 230, .4);
+    --wood: #8a5a33;
+    --wood-dark: #5e3b1f;
+    --yellow: #f4d35e;
+    --yellow-dark: #b8952c;
+    --display: "Caveat Brush", "Segoe Print", "Comic Sans MS", cursive;
+    --body: "Nunito", "Segoe UI", system-ui, -apple-system, sans-serif;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { min-height: 100%; }
+  body {
+    margin: 0;
+    background: var(--board-deep);
+    color: var(--chalk);
+    font-family: var(--body);
+    font-size: 16px;
+    padding-block: 24px 32px;
+    padding-inline: 16px;
+  }
+  :focus-visible { outline: 3px solid var(--yellow); outline-offset: 3px; }
+
+  /* The chalkboard */
+  .board {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: clamp(18px, 3vw, 36px);
+    background:
+      radial-gradient(ellipse at 22% 18%, rgba(255, 255, 255, .06), transparent 55%),
+      radial-gradient(ellipse at 82% 88%, rgba(255, 255, 255, .04), transparent 50%),
+      var(--board);
+    border: 14px solid var(--wood);
+    border-radius: 8px;
+    box-shadow:
+      inset 0 0 0 2px var(--wood-dark),
+      inset 0 0 70px rgba(0, 0, 0, .35),
+      0 20px 50px rgba(0, 0, 0, .5);
+  }
+
+  .top {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 6px 24px;
+    margin-bottom: clamp(16px, 3vw, 28px);
+  }
+  h1 {
+    font-family: var(--display);
+    font-weight: 400;
+    font-size: clamp(44px, 6.5vw, 72px);
+    line-height: 1;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .top p { margin: 0; color: var(--chalk-dim); }
+  .top-right { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
+  kbd {
+    font-family: var(--body);
+    font-weight: 800;
+    font-size: .85em;
+    color: var(--chalk);
+    border: 1px solid var(--dash);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    padding: 0 6px;
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+    gap: clamp(24px, 4vw, 56px);
+    align-items: start;
+  }
+
+  /* Wheel */
+  .stage { display: flex; flex-direction: column; align-items: center; gap: 18px; }
+  .wheel-box { position: relative; width: min(100%, 560px); aspect-ratio: 1 / 1; max-width: 100%; }
+  #wheel {
+    width: 100%;
+    height: 100%;
+    display: block;
+    border-radius: 50%;
+    cursor: pointer;
+    filter: drop-shadow(0 14px 22px rgba(0, 0, 0, .45));
+  }
+  .pointer {
+    position: absolute;
+    top: -8px;
+    left: 50%;
+    width: 38px;
+    height: 50px;
+    margin-left: -19px;
+    background: linear-gradient(90deg, var(--wood-dark), var(--wood) 45%, var(--wood-dark));
+    clip-path: polygon(0 0, 100% 0, 100% 38%, 50% 100%, 0 38%);
+    transform-origin: 50% 18%;
+    filter: drop-shadow(0 4px 3px rgba(0, 0, 0, .4));
+    z-index: 2;
+  }
+  .pointer::after {
+    content: "";
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    width: 10px;
+    height: 10px;
+    margin-left: -5px;
+    border-radius: 50%;
+    background: var(--yellow);
+  }
+  .pointer.bump { animation: bump .12s ease-out; }
+  @keyframes bump { 50% { transform: rotate(-14deg); } }
+
+  .spin {
+    font-family: var(--body);
+    font-weight: 900;
+    font-size: 20px;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--board-deep);
+    background: var(--yellow);
+    border: 0;
+    border-radius: 999px;
+    padding: 14px 52px;
+    cursor: pointer;
+    box-shadow: 0 5px 0 var(--yellow-dark);
+    transition: transform .08s, box-shadow .08s;
+  }
+  .spin:active { transform: translateY(3px); box-shadow: 0 2px 0 var(--yellow-dark); }
+  .spin:disabled { opacity: .55; cursor: default; }
+  .note { min-height: 1.4em; margin: 0; color: var(--yellow); text-align: center; }
+
+  /* Class list */
+  .register { display: flex; flex-direction: column; gap: 26px; }
+  .register section { display: flex; flex-direction: column; gap: 12px; }
+  .label {
+    margin: 0;
+    font-size: 12.5px;
+    font-weight: 800;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--chalk-dim);
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+  }
+  .label .count { font-variant-numeric: tabular-nums; letter-spacing: .04em; text-transform: none; font-weight: 700; }
+
+  .add-row { display: flex; gap: 10px; align-items: flex-end; }
+  .add-row input {
+    flex: 1;
+    min-width: 0;
+    background: transparent;
+    border: 0;
+    border-bottom: 2px dashed var(--dash);
+    color: var(--chalk);
+    font: inherit;
+    font-size: 18px;
+    font-weight: 700;
+    padding: 8px 2px;
+    outline: none;
+  }
+  .add-row input::placeholder { color: rgba(241, 239, 230, .38); font-weight: 600; }
+  .add-row input:focus { border-bottom-color: var(--yellow); }
+  .hint { margin: 0; font-size: 13px; color: var(--chalk-dim); }
+
+  .btn {
+    font: inherit;
+    font-weight: 800;
+    font-size: 15px;
+    color: var(--chalk);
+    background: transparent;
+    border: 2px solid rgba(241, 239, 230, .5);
+    border-radius: 999px;
+    padding: 7px 16px;
+    cursor: pointer;
+  }
+  .btn:hover { border-color: var(--chalk); background: rgba(241, 239, 230, .06); }
+  .btn.primary { background: var(--yellow); border-color: var(--yellow); color: var(--board-deep); }
+  .btn.primary:hover { background: #f7dc7b; }
+  .text-btn {
+    background: none;
+    border: 0;
+    padding: 0;
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 800;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--chalk-dim);
+    cursor: pointer;
+    text-decoration: underline dotted;
+    text-underline-offset: 3px;
+  }
+  .text-btn:hover { color: var(--chalk); }
+
+  #names {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 340px;
+    overflow-y: auto;
+    border-top: 1px solid var(--line);
+  }
+  #names li {
+    display: grid;
+    grid-template-columns: 2em 14px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 2px;
+    border-bottom: 1px solid var(--line);
+  }
+  #names li.empty { display: block; padding: 16px 2px; color: var(--chalk-dim); font-style: italic; }
+  .roll { font-size: 14px; color: var(--chalk-dim); font-variant-numeric: tabular-nums; text-align: right; }
+  .swatch { width: 14px; height: 14px; border-radius: 50%; }
+  .nm { font-size: 18px; font-weight: 700; overflow-wrap: anywhere; }
+  .del {
+    background: none;
+    border: 0;
+    color: var(--chalk-dim);
+    font-size: 22px;
+    line-height: 1;
+    padding: 2px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .del:hover { color: var(--chalk); background: rgba(241, 239, 230, .08); }
+
+  .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .sound { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--chalk-dim); cursor: pointer; }
+  .sound input { accent-color: var(--yellow); width: 16px; height: 16px; margin: 0; }
+
+  #called { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; counter-reset: turn; }
+  #called li {
+    counter-increment: turn;
+    font-weight: 700;
+    padding: 4px 12px 4px 10px;
+    border: 1px dashed var(--dash);
+    border-radius: 999px;
+  }
+  #called li::before { content: counter(turn) ". "; color: var(--chalk-dim); font-variant-numeric: tabular-nums; }
+  .called-empty { margin: 0; color: var(--chalk-dim); font-style: italic; }
+
+  /* Winner slate */
+  .overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(8, 18, 15, .72);
+  }
+  .slate {
+    width: min(480px, 100%);
+    text-align: center;
+    padding: 26px 30px 30px;
+    background: var(--board);
+    border: 12px solid var(--wood);
+    border-radius: 8px;
+    box-shadow: inset 0 0 0 2px var(--wood-dark), inset 0 0 40px rgba(0, 0, 0, .35), 0 24px 60px rgba(0, 0, 0, .6);
+    animation: pop .35s cubic-bezier(.2, 1.4, .4, 1);
+  }
+  @keyframes pop { from { transform: scale(.7); opacity: 0; } }
+  .slate .label { justify-content: center; }
+  .winner {
+    font-family: var(--display);
+    font-size: clamp(60px, 15vw, 108px);
+    line-height: 1.05;
+    margin: 10px 0 26px;
+    overflow-wrap: anywhere;
+    text-decoration: underline solid 5px;
+    text-underline-offset: 12px;
+  }
+  .slate .row { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+
+  .dust {
+    position: fixed;
+    top: -14px;
+    width: 9px;
+    height: 14px;
+    border-radius: 2px;
+    z-index: 11;
+    pointer-events: none;
+    animation: fall linear forwards;
+  }
+  @keyframes fall { to { transform: translateY(110vh) rotate(700deg); } }
+
+  @media (max-width: 820px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+  /* Desktop: the board fills the whole window and the wheel grows to fit */
+  @media (min-width: 821px) {
+    html, body { height: 100%; }
+    body { padding-block: 14px; padding-inline: 14px; }
+    .board { height: 100%; max-width: none; display: flex; flex-direction: column; }
+    .top { margin-bottom: 18px; }
+    .layout {
+      flex: 1;
+      min-height: 0;
+      grid-template-columns: minmax(0, 1fr) clamp(300px, 27vw, 420px);
+      grid-template-rows: minmax(0, 1fr);
+      align-items: stretch;
+    }
+    .stage { min-height: 0; container-type: size; justify-content: center; }
+    .wheel-box { width: min(100cqw, 100cqh - 124px); }
+    .register { min-height: 0; }
+    .register .roster { flex: 1; min-height: 0; }
+    #names { flex: 1; min-height: 0; max-height: none; }
+    #called { max-height: 6.5em; overflow-y: auto; }
+  }
+  @media (max-width: 480px) {
+    .board { border-width: 8px; }
+    .slate { border-width: 8px; padding: 22px 18px 24px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .slate { animation: none; }
+    .pointer.bump { animation: none; }
+  }
+</style>
+</head>
+<body>
+
+<main class="board">
+  <header class="top">
+    <h1>Who's next?</h1>
+    <div class="top-right">
+      <p>Click the wheel, press <b>Spin</b>, or hit <kbd>Space</kbd></p>
+      <button class="btn" id="fullBtn" title="Full screen (F)">Full screen</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <div class="stage">
+      <div class="wheel-box">
+        <div class="pointer" id="pointer"></div>
+        <canvas id="wheel" aria-label="Name wheel — click to spin"></canvas>
+      </div>
+      <button class="spin" id="spinBtn">Spin</button>
+      <p class="note" id="note" aria-live="polite"></p>
+    </div>
+
+    <div class="register">
+      <section class="roster">
+        <h2 class="label">Class list <span class="count" id="count"></span></h2>
+        <div class="add-row">
+          <input id="nameInput" type="text" placeholder="Add a student…" autocomplete="off" aria-label="Student name">
+          <button class="btn primary" id="addBtn">Add</button>
+        </div>
+        <p class="hint">Add several at once with commas: Dara, Srey, Vuthy</p>
+        <ol id="names"></ol>
+        <div class="tools">
+          <button class="btn" id="shuffleBtn">Shuffle</button>
+          <button class="btn" id="resetBtn">Reset list</button>
+          <label class="sound" for="soundOpt"><input type="checkbox" id="soundOpt" checked> Sounds</label>
+        </div>
+      </section>
+
+      <section>
+        <h2 class="label">Called so far <button class="text-btn" id="clearCalledBtn">Clear</button></h2>
+        <ol id="called"></ol>
+        <p class="called-empty" id="calledEmpty">Nobody yet — give it a spin.</p>
+      </section>
+    </div>
+  </div>
+</main>
+
+<div class="overlay" id="overlay" hidden>
+  <div class="slate" role="dialog" aria-modal="true" aria-labelledby="winnerLabel">
+    <p class="label" id="winnerLabel">Next up</p>
+    <div class="winner" id="winnerName" aria-live="assertive"></div>
+    <div class="row">
+      <button class="btn primary" id="okBtn">OK</button>
+      <button class="btn" id="removeWinnerBtn">Remove from wheel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// --- core ---
+const DEFAULT_NAMES = [
+  "Por Khiev", "Da", "Por Kong", "Roth", "Leak", "Pich", "Teang", "Sal", "Sna",
+  "Hor", "Ka", "Mout", "Mom", "Ro", "Rey", "Nea", "Heang", "Chhun"
+];
+
+// Names in this list still appear on the wheel, but the wheel will never stop on them.
+const NEVER_PICK = ["Hor", "Sna", "Mout"];
+
+const TAU = Math.PI * 2;
+const POINTER_ANGLE = -Math.PI / 2; // pointer sits at the top of the wheel
+
+function isBlocked(name) {
+  const n = name.trim().toLowerCase();
+  return NEVER_PICK.some(b => b.trim().toLowerCase() === n);
+}
+
+// Which slice is under the pointer for a given wheel rotation.
+function indexAtPointer(rot, count) {
+  const arc = TAU / count;
+  const a = (((POINTER_ANGLE - rot) % TAU) + TAU) % TAU;
+  return Math.floor(a / arc) % count;
+}
+
+// Choose the winner first, then work out the rotation that lands on it.
+function planSpin(names, rotation, rand = Math.random) {
+  const eligible = names.map((_, i) => i).filter(i => !isBlocked(names[i]));
+  if (!eligible.length) return null;
+  const idx = eligible[Math.floor(rand() * eligible.length)];
+  const arc = TAU / names.length;
+  const within = 0.15 + rand() * 0.7; // land somewhere inside the slice, never on an edge
+  const target = POINTER_ANGLE - (idx + within) * arc;
+  const delta = (((target - rotation) % TAU) + TAU) % TAU;
+  const turns = 5 + Math.floor(rand() * 3);
+  return { idx, end: rotation + turns * TAU + delta };
+}
+// --- end core ---
+
+// Chalk pastels for the slices; lettering is dark slate for contrast.
+const COLORS = ["#f4d35e", "#f28f8f", "#8ecae6", "#9ee6b8", "#c9a7eb", "#f6b26b"];
+const INK = "#1f3b34";
+const WOOD = "#8a5a33";
+const WOOD_DARK = "#5e3b1f";
+const CHALK = "#f1efe6";
+// v2: new class list — a fresh key so the browser doesn't bring back the old saved names
+const NAMES_KEY = "luckyspin.names.v2";
+const CALLED_KEY = "luckyspin.called.v2";
+
+const canvas = document.getElementById("wheel");
+const ctx = canvas.getContext("2d");
+const pointerEl = document.getElementById("pointer");
+const spinBtn = document.getElementById("spinBtn");
+const noteEl = document.getElementById("note");
+const listEl = document.getElementById("names");
+const countEl = document.getElementById("count");
+const calledEl = document.getElementById("called");
+const calledEmptyEl = document.getElementById("calledEmpty");
+const input = document.getElementById("nameInput");
+const overlay = document.getElementById("overlay");
+const winnerNameEl = document.getElementById("winnerName");
+const soundOpt = document.getElementById("soundOpt");
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+let names = load(NAMES_KEY, DEFAULT_NAMES);
+let called = load(CALLED_KEY, []);
+let rotation = 0;
+let spinning = false;
+let lastWinner = -1;
+
+function load(key, fallback) {
+  try {
+    const saved = JSON.parse(localStorage.getItem(key));
+    if (Array.isArray(saved)) return saved.filter(n => typeof n === "string");
+  } catch (e) {}
+  return [...fallback];
+}
+function save(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {}
+}
+
+function colorFor(i, n) {
+  // keep the last slice from matching the first one
+  if (n > 1 && i === n - 1 && (n - 1) % COLORS.length === 0) return COLORS[2];
+  return COLORS[i % COLORS.length];
+}
+
+function draw() {
+  const size = canvas.clientWidth;
+  if (!size) return;
+  const dpr = window.devicePixelRatio || 1;
+  if (canvas.width !== Math.round(size * dpr)) canvas.width = canvas.height = Math.round(size * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, size, size);
+
+  const r = size / 2;
+  const rim = r * 0.07;
+  const R = r - rim;
+
+  // wooden rim
+  ctx.beginPath();
+  ctx.arc(r, r, r - 1, 0, TAU);
+  ctx.fillStyle = WOOD;
+  ctx.fill();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = WOOD_DARK;
+  ctx.stroke();
+
+  if (!names.length) {
+    ctx.beginPath();
+    ctx.arc(r, r, R, 0, TAU);
+    ctx.fillStyle = "#142823";
+    ctx.fill();
+    ctx.fillStyle = "#9fb5ab";
+    ctx.font = `700 ${Math.round(r * 0.09)}px Nunito, Segoe UI, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("Add students to the list", r, r);
+    return;
+  }
+
+  const n = names.length;
+  const arc = TAU / n;
+  const fontSize = Math.max(12, Math.min(R * 0.12, arc * R * 0.36));
+
+  for (let i = 0; i < n; i++) {
+    const start = rotation + i * arc;
+    ctx.beginPath();
+    ctx.moveTo(r, r);
+    ctx.arc(r, r, R, start, start + arc);
+    ctx.closePath();
+    ctx.fillStyle = colorFor(i, n);
+    ctx.fill();
+    if (n > 1) {
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    ctx.save();
+    ctx.translate(r, r);
+    ctx.rotate(start + arc / 2);
+    ctx.font = `800 ${fontSize}px Nunito, Segoe UI, sans-serif`;
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = INK;
+    let label = names[i];
+    const maxW = R * 0.68;
+    while (label.length > 1 && ctx.measureText(label).width > maxW) label = label.slice(0, -1);
+    if (label !== names[i]) label = label.slice(0, -1) + "…";
+    ctx.fillText(label, R - 16, 0);
+    ctx.restore();
+  }
+
+  // pegs on the rim at every slice boundary
+  if (n > 1) {
+    for (let i = 0; i < n; i++) {
+      const a = rotation + i * arc;
+      ctx.beginPath();
+      ctx.arc(r + (r - rim / 2) * Math.cos(a), r + (r - rim / 2) * Math.sin(a), rim * 0.24, 0, TAU);
+      ctx.fillStyle = CHALK;
+      ctx.fill();
+    }
+  }
+
+  // wooden knob
+  ctx.beginPath();
+  ctx.arc(r, r, r * 0.13, 0, TAU);
+  ctx.fillStyle = WOOD;
+  ctx.fill();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = WOOD_DARK;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(r, r, r * 0.045, 0, TAU);
+  ctx.fillStyle = "#f4d35e";
+  ctx.fill();
+}
+
+function renderList() {
+  listEl.innerHTML = "";
+  countEl.textContent = `${names.length} ${names.length === 1 ? "student" : "students"}`;
+  if (!names.length) {
+    const li = document.createElement("li");
+    li.className = "empty";
+    li.textContent = "The list is empty — add a name above.";
+    listEl.appendChild(li);
+  }
+  names.forEach((name, i) => {
+    const li = document.createElement("li");
+    const roll = document.createElement("span");
+    roll.className = "roll";
+    roll.textContent = i + 1;
+    const sw = document.createElement("span");
+    sw.className = "swatch";
+    sw.style.background = colorFor(i, names.length);
+    const nm = document.createElement("span");
+    nm.className = "nm";
+    nm.textContent = name;
+    const del = document.createElement("button");
+    del.className = "del";
+    del.setAttribute("aria-label", `Remove ${name}`);
+    del.title = `Remove ${name}`;
+    del.textContent = "×";
+    del.onclick = () => removeAt(i);
+    li.append(roll, sw, nm, del);
+    listEl.appendChild(li);
+  });
+  draw();
+}
+
+function renderCalled() {
+  calledEl.innerHTML = "";
+  called.forEach(name => {
+    const li = document.createElement("li");
+    li.textContent = name;
+    calledEl.appendChild(li);
+  });
+  calledEmptyEl.hidden = called.length > 0;
+}
+
+function addNames(text) {
+  const incoming = text.split(",").map(s => s.trim()).filter(Boolean);
+  const skipped = [];
+  for (const n of incoming) {
+    if (names.some(x => x.toLowerCase() === n.toLowerCase())) skipped.push(n);
+    else names.push(n);
+  }
+  noteEl.textContent = skipped.length ? `Already on the wheel: ${skipped.join(", ")}` : "";
+  save(NAMES_KEY, names);
+  renderList();
+}
+
+function removeAt(i) {
+  if (spinning) return;
+  names.splice(i, 1);
+  save(NAMES_KEY, names);
+  renderList();
+}
+
+// --- sound ---
+// Winner sounds, saved next to this page. One is picked at random for each winner.
+//   win-sound.mp3   — "hapi hapi hapi (cat meme)"
+//   win-sound-2.mp3 — "funny happy memes"
+//   win-sound-3.mp3 — "laughing dog meme"
+const WIN_SOUNDS = ["win-sound.mp3", "win-sound-2.mp3", "win-sound-3.mp3"].map(src => {
+  const a = new Audio(src);
+  a.preload = "auto";
+  return a;
+});
+
+function playWinSound() {
+  if (!soundOpt.checked) return;
+  const s = WIN_SOUNDS[Math.floor(Math.random() * WIN_SOUNDS.length)];
+  s.currentTime = 0;
+  s.play().catch(() => {});
+}
+function stopWinSound() {
+  WIN_SOUNDS.forEach(s => { s.pause(); s.currentTime = 0; });
+}
+
+let audioCtx = null;
+function tick() {
+  if (soundOpt.checked) {
+    try {
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = "triangle";
+      o.frequency.value = 1400;
+      g.gain.setValueAtTime(0.08, audioCtx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.035);
+      o.connect(g).connect(audioCtx.destination);
+      o.start();
+      o.stop(audioCtx.currentTime + 0.04);
+    } catch (e) {}
+  }
+  pointerEl.classList.remove("bump");
+  void pointerEl.offsetWidth;
+  pointerEl.classList.add("bump");
+}
+
+// --- spin ---
+function spin() {
+  if (spinning || !overlay.hidden) return;
+  if (!names.length) { noteEl.textContent = "Add some students to the list first."; return; }
+  const plan = planSpin(names, rotation);
+  if (!plan) { noteEl.textContent = "Add at least one more student to spin."; return; }
+  noteEl.textContent = "";
+  stopWinSound();
+
+  spinning = true;
+  spinBtn.disabled = true;
+  const start = rotation;
+  const end = plan.end;
+  const duration = reduceMotion ? 1200 : 5000 + Math.random() * 1500;
+  const t0 = performance.now();
+  let lastIdx = indexAtPointer(rotation, names.length);
+  const easeOut = t => 1 - Math.pow(1 - t, 4);
+
+  function frame(now) {
+    const t = Math.min(1, (now - t0) / duration);
+    rotation = start + (end - start) * easeOut(t);
+    const idx = indexAtPointer(rotation, names.length);
+    if (idx !== lastIdx) { lastIdx = idx; tick(); }
+    draw();
+    if (t < 1) {
+      requestAnimationFrame(frame);
+    } else {
+      rotation = end % TAU;
+      spinning = false;
+      spinBtn.disabled = false;
+      showWinner(plan.idx);
+    }
+  }
+  requestAnimationFrame(frame);
+}
+
+function showWinner(i) {
+  lastWinner = i;
+  winnerNameEl.textContent = names[i];
+  winnerNameEl.style.textDecorationColor = colorFor(i, names.length);
+  called.push(names[i]);
+  save(CALLED_KEY, called);
+  renderCalled();
+  overlay.hidden = false;
+  playWinSound();
+  chalkDust();
+  document.getElementById("okBtn").focus();
+}
+
+function closeWinner(remove) {
+  stopWinSound();
+  overlay.hidden = true;
+  if (remove && lastWinner >= 0) removeAt(lastWinner);
+  lastWinner = -1;
+  spinBtn.focus();
+}
+
+function chalkDust() {
+  if (reduceMotion) return;
+  for (let k = 0; k < 70; k++) {
+    const p = document.createElement("div");
+    p.className = "dust";
+    p.style.left = Math.random() * 100 + "vw";
+    p.style.background = COLORS[k % COLORS.length];
+    p.style.animationDuration = 1.8 + Math.random() * 1.8 + "s";
+    p.style.animationDelay = Math.random() * 0.4 + "s";
+    document.body.appendChild(p);
+    setTimeout(() => p.remove(), 4500);
+  }
+}
+
+function shuffle() {
+  if (spinning) return;
+  for (let i = names.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [names[i], names[j]] = [names[j], names[i]];
+  }
+  save(NAMES_KEY, names);
+  renderList();
+}
+
+// --- events ---
+spinBtn.onclick = spin;
+canvas.onclick = spin;
+document.getElementById("addBtn").onclick = () => { addNames(input.value); input.value = ""; input.focus(); };
+input.addEventListener("keydown", e => {
+  if (e.key === "Enter") { addNames(input.value); input.value = ""; }
+});
+document.getElementById("shuffleBtn").onclick = shuffle;
+document.getElementById("resetBtn").onclick = () => {
+  if (spinning) return;
+  names = [...DEFAULT_NAMES];
+  save(NAMES_KEY, names);
+  renderList();
+};
+document.getElementById("clearCalledBtn").onclick = () => {
+  called = [];
+  save(CALLED_KEY, called);
+  renderCalled();
+};
+document.getElementById("okBtn").onclick = () => closeWinner(false);
+document.getElementById("removeWinnerBtn").onclick = () => closeWinner(true);
+overlay.addEventListener("click", e => { if (e.target === overlay) closeWinner(false); });
+document.addEventListener("keydown", e => {
+  if (!overlay.hidden) {
+    if (e.key === "Escape") closeWinner(false);
+    return;
+  }
+  const a = document.activeElement;
+  const typing = a && a.tagName === "INPUT" && a.type === "text";
+  const typingOrButton = a && (a.tagName === "INPUT" || (a.tagName === "BUTTON" && a !== spinBtn));
+  if (e.code === "Space" && !typingOrButton) {
+    e.preventDefault();
+    spin();
+  }
+  if (e.key.toLowerCase() === "f" && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) toggleFullscreen();
+});
+
+// --- full screen ---
+const fullBtn = document.getElementById("fullBtn");
+function toggleFullscreen() {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+}
+fullBtn.onclick = toggleFullscreen;
+fullBtn.hidden = !document.documentElement.requestFullscreen;
+document.addEventListener("fullscreenchange", () => {
+  fullBtn.textContent = document.fullscreenElement ? "Exit full screen" : "Full screen";
+});
+
+window.addEventListener("resize", draw);
+if (window.ResizeObserver) new ResizeObserver(draw).observe(canvas);
+
+renderList();
+renderCalled();
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(draw);
+</script>
+</body>
+</html>

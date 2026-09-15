@@ -247,12 +247,6 @@
   .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
   .sound { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--chalk-dim); cursor: pointer; }
   .sound input { accent-color: var(--yellow); width: 16px; height: 16px; margin: 0; }
-  .music { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--chalk-dim); }
-  .music .sound { margin-left: 0; }
-  .music input[type="range"] { flex: 1; min-width: 0; max-width: 220px; margin: 0; accent-color: var(--yellow); cursor: pointer; }
-  .music input[type="range"]:disabled { opacity: .4; cursor: default; }
-  .music input[type="range"]:disabled + output { color: var(--chalk-dim); }
-  .music output { min-width: 3.2em; text-align: right; font-variant-numeric: tabular-nums; color: var(--chalk); font-weight: 700; }
 
   #called { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; counter-reset: turn; }
   #called li {
@@ -378,11 +372,6 @@
           <button class="btn" id="shuffleBtn">Shuffle</button>
           <button class="btn" id="resetBtn">Reset list</button>
           <label class="sound" for="soundOpt"><input type="checkbox" id="soundOpt" checked> Sounds</label>
-        </div>
-        <div class="music">
-          <label class="sound" for="musicOpt"><input type="checkbox" id="musicOpt" checked> Music</label>
-          <input type="range" id="musicVol" min="0" max="100" step="5" value="5" aria-label="Music volume">
-          <output id="musicVolOut" for="musicVol">5%</output>
         </div>
       </section>
 
@@ -667,51 +656,6 @@ function stopWinSound() {
   WIN_SOUNDS.forEach(s => { s.pause(); s.currentTime = 0; });
 }
 
-// Background music: loops while idle, goes quiet during a spin and the winner slate.
-const bgMusic = new Audio("ហេងចូលហេង-Heng-jol-heng-by-Preab-sovat.m4a");
-bgMusic.loop = true;
-bgMusic.preload = "auto";
-
-// v2: default dropped to 5% — a fresh key so an old saved level doesn't override it
-const MUSIC_VOL_KEY = "luckyspin.musicVolume.v2";
-const musicVol = document.getElementById("musicVol");
-const musicVolOut = document.getElementById("musicVolOut");
-function setMusicVolume(pct) {
-  musicVol.value = pct;
-  musicVolOut.textContent = `${pct}%`;
-  bgMusic.volume = pct / 100;
-}
-let savedVol = 5;
-try {
-  const v = localStorage.getItem(MUSIC_VOL_KEY);
-  if (v !== null && Number(v) >= 0 && Number(v) <= 100) savedVol = Number(v);
-} catch (e) {}
-setMusicVolume(savedVol);
-musicVol.addEventListener("input", () => {
-  setMusicVolume(Number(musicVol.value));
-  try { localStorage.setItem(MUSIC_VOL_KEY, musicVol.value); } catch (e) {}
-});
-
-// Music on/off, remembered between visits.
-const MUSIC_ON_KEY = "luckyspin.musicOn";
-const musicOpt = document.getElementById("musicOpt");
-try { musicOpt.checked = localStorage.getItem(MUSIC_ON_KEY) !== "false"; } catch (e) {}
-musicVol.disabled = !musicOpt.checked;
-musicOpt.addEventListener("change", () => {
-  musicVol.disabled = !musicOpt.checked;
-  try { localStorage.setItem(MUSIC_ON_KEY, musicOpt.checked); } catch (e) {}
-  if (musicOpt.checked) playBgMusic();
-  else pauseBgMusic();
-});
-
-function playBgMusic() {
-  if (!musicOpt.checked || spinning || !overlay.hidden) return;
-  bgMusic.play().catch(() => {});
-}
-function pauseBgMusic() {
-  bgMusic.pause();
-}
-
 let audioCtx = null;
 function tick() {
   if (soundOpt.checked) {
@@ -741,7 +685,6 @@ function spin() {
   if (!plan) { noteEl.textContent = "Add at least one more student to spin."; return; }
   noteEl.textContent = "";
   stopWinSound();
-  pauseBgMusic();
 
   spinning = true;
   spinBtn.disabled = true;
@@ -789,7 +732,6 @@ function closeWinner(remove) {
   if (remove && lastWinner >= 0) removeAt(lastWinner);
   lastWinner = -1;
   spinBtn.focus();
-  playBgMusic();
 }
 
 function chalkDust() {
@@ -871,18 +813,6 @@ if (window.ResizeObserver) new ResizeObserver(draw).observe(canvas);
 soundOpt.addEventListener("change", () => {
   if (!soundOpt.checked) stopWinSound();
 });
-
-// Browsers block autoplay until the page is clicked or a key is pressed, so try now
-// and again on the first interaction. These run after the spin handlers, so if that
-// first click is a spin the music stays quiet until the winner slate is closed.
-playBgMusic();
-function unlockBgMusic() {
-  playBgMusic();
-  document.removeEventListener("click", unlockBgMusic);
-  document.removeEventListener("keydown", unlockBgMusic);
-}
-document.addEventListener("click", unlockBgMusic);
-document.addEventListener("keydown", unlockBgMusic);
 
 renderList();
 renderCalled();

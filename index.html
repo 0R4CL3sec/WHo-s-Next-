@@ -193,6 +193,10 @@
     padding: 7px 16px;
     cursor: pointer;
   }
+  a.btn { display: inline-block; text-decoration: none; }
+  /* Invisible but still clickable, so students don't see it; shows when tabbed to */
+  .admin-link, .admin-link:hover { opacity: 0; }
+  .admin-link:focus-visible { opacity: 1; }
   .btn:hover { border-color: var(--chalk); background: rgba(241, 239, 230, .06); }
   .btn.primary { background: var(--yellow); border-color: var(--yellow); color: var(--board-deep); }
   .btn.primary:hover { background: #f7dc7b; }
@@ -232,6 +236,9 @@
   .roll { font-size: 14px; color: var(--chalk-dim); font-variant-numeric: tabular-nums; text-align: right; }
   .swatch { width: 14px; height: 14px; border-radius: 50%; }
   .nm { font-size: 18px; font-weight: 700; overflow-wrap: anywhere; }
+  /* called: off the wheel until "Called so far" is cleared */
+  #names li.is-called .nm { color: var(--chalk-dim); text-decoration: line-through; text-decoration-color: rgba(159, 181, 171, .6); }
+  #names li.is-called .swatch { background: transparent; border: 2px dashed var(--dash); }
   .del {
     background: none;
     border: 0;
@@ -346,6 +353,7 @@
     <div class="top-right">
       <p>Click the wheel, press <b>Spin</b>, or hit <kbd>Space</kbd></p>
       <button class="btn" id="fullBtn" title="Full screen (F)">Full screen</button>
+      <a class="btn admin-link" href="admin.html">Admin</a>
     </div>
   </header>
 
@@ -389,12 +397,13 @@
     <p class="label" id="winnerLabel">Next up</p>
     <div class="winner" id="winnerName" aria-live="assertive"></div>
     <div class="row">
-      <button class="btn primary" id="okBtn">OK</button>
-      <button class="btn" id="removeWinnerBtn">Remove from wheel</button>
+      <button class="btn primary" id="okBtn">Continue</button>
     </div>
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
 <script>
 // --- core ---
 const DEFAULT_NAMES = [
@@ -403,14 +412,17 @@ const DEFAULT_NAMES = [
 ];
 
 // Names in this list still appear on the wheel, but the wheel will never stop on them.
+// With the database connected, the admin page's "Can be picked" switches decide this
+// instead; this list is only the starting point when there is no database.
 const NEVER_PICK = ["Hor", "Sna", "Mout"];
+let neverPick = [...NEVER_PICK];
 
 const TAU = Math.PI * 2;
 const POINTER_ANGLE = -Math.PI / 2; // pointer sits at the top of the wheel
 
 function isBlocked(name) {
   const n = name.trim().toLowerCase();
-  return NEVER_PICK.some(b => b.trim().toLowerCase() === n);
+  return neverPick.some(b => b.trim().toLowerCase() === n);
 }
 
 // Which slice is under the pointer for a given wheel rotation.
@@ -421,16 +433,17 @@ function indexAtPointer(rot, count) {
 }
 
 // Choose the winner first, then work out the rotation that lands on it.
-function planSpin(names, rotation, rand = Math.random) {
+// `forced` is the index chosen on the admin page's "Next call", or -1 for random.
+function planSpin(names, rotation, rand = Math.random, forced = -1) {
   const eligible = names.map((_, i) => i).filter(i => !isBlocked(names[i]));
-  if (!eligible.length) return null;
-  const idx = eligible[Math.floor(rand() * eligible.length)];
+  if (!eligible.length && forced < 0) return null;
+  const idx = forced >= 0 ? forced : eligible[Math.floor(rand() * eligible.length)];
   const arc = TAU / names.length;
   const within = 0.15 + rand() * 0.7; // land somewhere inside the slice, never on an edge
   const target = POINTER_ANGLE - (idx + within) * arc;
   const delta = (((target - rotation) % TAU) + TAU) % TAU;
   const turns = 12 + Math.floor(rand() * 3);
-  return { idx, end: rotation + turns * TAU + delta };
+  return { idx, forced: forced >= 0, end: rotation + turns * TAU + delta };
 }
 // --- end core ---
 
@@ -443,6 +456,7 @@ const CHALK = "#f1efe6";
 // v2: new class list — a fresh key so the browser doesn't bring back the old saved names
 const NAMES_KEY = "luckyspin.names.v2";
 const CALLED_KEY = "luckyspin.called.v2";
+const NEVER_PICK_KEY = "luckyspin.neverPick";
 
 const canvas = document.getElementById("wheel");
 const ctx = canvas.getContext("2d");
@@ -461,9 +475,10 @@ const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").match
 
 let names = load(NAMES_KEY, DEFAULT_NAMES);
 let called = load(CALLED_KEY, []);
+neverPick = load(NEVER_PICK_KEY, NEVER_PICK);
 let rotation = 0;
 let spinning = false;
-let lastWinner = -1;
+let wheelNames = []; // the names on the wheel right now: the class list minus anyone called
 
 function load(key, fallback) {
   try {
@@ -474,6 +489,97 @@ function load(key, fallback) {
 }
 function save(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {}
+}
+
+// --- database (Supabase) ---
+// The URL and key live in config.js. Run supabase-setup.sql in the SQL editor first.
+// The browser copy is the fallback when the database can't be reached.
+const db = typeof SUPABASE_URL === "string" && SUPABASE_URL && SUPABASE_KEY && window.supabase
+  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
+  : null;
+let dbLoading = false;
+
+function must({ error }) {
+  if (error) throw error;
+}
+
+// Writes run one after another so they reach the database in the order they happened.
+let dbQueue = Promise.resolve();
+function dbWrite(what, job) {
+  if (!db) return;
+  dbQueue = dbQueue.then(job).catch(err => {
+    console.error(`Supabase: couldn't save ${what}`, err);
+    noteEl.textContent = `Couldn't save the ${what} to the database — it's kept on this computer.`;
+  });
+}
+
+// Save the class list: here, then in the database. `removed` are names taken off the list.
+function storeNames(removed = []) {
+  save(NAMES_KEY, names);
+  const rows = names.map((name, position) => ({ name, position }));
+  dbWrite("class list", async () => {
+    if (rows.length) must(await db.from("students").upsert(rows, { onConflict: "name" }));
+    if (removed.length) must(await db.from("students").delete().in("name", removed));
+  });
+}
+function storeCalled(name) {
+  save(CALLED_KEY, called);
+  dbWrite("called list", async () => must(await db.from("called").insert({ name })));
+}
+// Clearing only hides picks from this list; the admin page keeps the full history.
+function clearCalledStore() {
+  save(CALLED_KEY, called);
+  dbWrite("called list", async () =>
+    must(await db.from("called").update({ cleared: true }).eq("cleared", false)));
+}
+
+async function loadFromDb(quiet = false) {
+  if (!db) return;
+  dbLoading = true;
+  if (!quiet) noteEl.textContent = "Loading the class list…";
+  try {
+    const [s, c] = await Promise.all([
+      db.from("students").select("name, pickable").order("position").order("name"),
+      db.from("called").select("name").eq("cleared", false).order("id"),
+    ]);
+    must(s);
+    must(c);
+    names = s.data.map(r => r.name);
+    neverPick = s.data.filter(r => !r.pickable).map(r => r.name);
+    called = c.data.map(r => r.name);
+    save(NAMES_KEY, names);
+    save(NEVER_PICK_KEY, neverPick);
+    save(CALLED_KEY, called);
+    renderList();
+    renderCalled();
+    if (!quiet) noteEl.textContent = "";
+  } catch (err) {
+    console.error("Supabase: couldn't load", err);
+    noteEl.textContent = "Couldn't reach the database — using the list saved on this computer.";
+  } finally {
+    dbLoading = false;
+  }
+}
+
+// Pick up changes made elsewhere (the admin page, another computer). Never mid-spin
+// or while the winner is showing — that waits until the winner slate is closed.
+let refreshTimer = null;
+let refreshWanted = false;
+function refreshFromDb() {
+  if (!db) return;
+  clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(() => {
+    if (spinning || !overlay.hidden) { refreshWanted = true; return; }
+    refreshWanted = false;
+    dbQueue = dbQueue.then(() => loadFromDb(true));
+  }, 400);
+}
+if (db) {
+  db.channel("wheel")
+    .on("postgres_changes", { event: "*", schema: "public", table: "students" }, refreshFromDb)
+    .on("postgres_changes", { event: "*", schema: "public", table: "called" }, refreshFromDb)
+    .subscribe();
+  window.addEventListener("focus", refreshFromDb);
 }
 
 function colorFor(i, n) {
@@ -503,7 +609,7 @@ function draw() {
   ctx.strokeStyle = WOOD_DARK;
   ctx.stroke();
 
-  if (!names.length) {
+  if (!wheelNames.length) {
     ctx.beginPath();
     ctx.arc(r, r, R, 0, TAU);
     ctx.fillStyle = "#142823";
@@ -512,11 +618,16 @@ function draw() {
     ctx.font = `700 ${Math.round(r * 0.09)}px Nunito, Segoe UI, sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText("Add students to the list", r, r);
+    if (names.length) {
+      ctx.fillText("Everyone's been called", r, r - r * 0.07);
+      ctx.fillText("press Clear to start again", r, r + r * 0.07);
+    } else {
+      ctx.fillText("Add students to the list", r, r);
+    }
     return;
   }
 
-  const n = names.length;
+  const n = wheelNames.length;
   const arc = TAU / n;
   const fontSize = Math.max(12, Math.min(R * 0.12, arc * R * 0.36));
 
@@ -541,10 +652,10 @@ function draw() {
     ctx.textAlign = "right";
     ctx.textBaseline = "middle";
     ctx.fillStyle = INK;
-    let label = names[i];
+    let label = wheelNames[i];
     const maxW = R * 0.68;
     while (label.length > 1 && ctx.measureText(label).width > maxW) label = label.slice(0, -1);
-    if (label !== names[i]) label = label.slice(0, -1) + "…";
+    if (label !== wheelNames[i]) label = label.slice(0, -1) + "…";
     ctx.fillText(label, R - 16, 0);
     ctx.restore();
   }
@@ -574,7 +685,14 @@ function draw() {
   ctx.fill();
 }
 
+// Names already called stay off the wheel until "Called so far" is cleared.
+function isCalled(name) {
+  return called.includes(name);
+}
+
 function renderList() {
+  // mid-spin the wheel keeps its slices; it catches up once the winner slate closes
+  if (!spinning) wheelNames = names.filter(n => !isCalled(n));
   listEl.innerHTML = "";
   countEl.textContent = `${names.length} ${names.length === 1 ? "student" : "students"}`;
   if (!names.length) {
@@ -585,12 +703,17 @@ function renderList() {
   }
   names.forEach((name, i) => {
     const li = document.createElement("li");
+    const wi = wheelNames.indexOf(name);
+    if (isCalled(name)) {
+      li.className = "is-called";
+      li.title = `${name} has been called — off the wheel until you press Clear`;
+    }
     const roll = document.createElement("span");
     roll.className = "roll";
     roll.textContent = i + 1;
     const sw = document.createElement("span");
     sw.className = "swatch";
-    sw.style.background = colorFor(i, names.length);
+    if (wi >= 0) sw.style.background = colorFor(wi, wheelNames.length);
     const nm = document.createElement("span");
     nm.className = "nm";
     nm.textContent = name;
@@ -624,14 +747,14 @@ function addNames(text) {
     else names.push(n);
   }
   noteEl.textContent = skipped.length ? `Already on the wheel: ${skipped.join(", ")}` : "";
-  save(NAMES_KEY, names);
+  storeNames();
   renderList();
 }
 
 function removeAt(i) {
   if (spinning) return;
-  names.splice(i, 1);
-  save(NAMES_KEY, names);
+  const [removed] = names.splice(i, 1);
+  storeNames([removed]);
   renderList();
 }
 
@@ -678,27 +801,52 @@ function tick() {
 }
 
 // --- spin ---
-function spin() {
-  if (spinning || !overlay.hidden) return;
+// Who the admin page chose for the next spin, asked fresh at each spin so a choice made
+// a moment ago still counts. Gives up after 1.5s (or offline) and the spin is random.
+async function fetchNextUp() {
+  if (!db) return null;
+  try {
+    const res = await Promise.race([
+      db.from("students").select("name").eq("next_up", true).maybeSingle(),
+      new Promise(resolve => setTimeout(() => resolve(null), 1500)),
+    ]);
+    return res && !res.error && res.data ? res.data.name : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function spin() {
+  if (spinning || !overlay.hidden || dbLoading) return;
   if (!names.length) { noteEl.textContent = "Add some students to the list first."; return; }
-  const plan = planSpin(names, rotation);
-  if (!plan) { noteEl.textContent = "Add at least one more student to spin."; return; }
+  spinning = true; // hold the wheel still while we check for a "Next call"
+  spinBtn.disabled = true;
+  const nextUp = await fetchNextUp();
+  const forced = nextUp ? wheelNames.indexOf(nextUp) : -1;
+  const plan = wheelNames.length ? planSpin(wheelNames, rotation, Math.random, forced) : null;
+  if (!plan) {
+    spinning = false;
+    spinBtn.disabled = false;
+    if (refreshWanted) refreshFromDb();
+    noteEl.textContent = called.length
+      ? "Everyone has been called — press Clear under “Called so far” to start again."
+      : "Add at least one more student to spin.";
+    return;
+  }
   noteEl.textContent = "";
   stopWinSound();
 
-  spinning = true;
-  spinBtn.disabled = true;
   const start = rotation;
   const end = plan.end;
   const duration = reduceMotion ? 1200 : 15000 + Math.random() * 3000;
   const t0 = performance.now();
-  let lastIdx = indexAtPointer(rotation, names.length);
+  let lastIdx = indexAtPointer(rotation, wheelNames.length);
   const easeOut = t => 1 - Math.pow(1 - t, 4);
 
   function frame(now) {
     const t = Math.min(1, (now - t0) / duration);
     rotation = start + (end - start) * easeOut(t);
-    const idx = indexAtPointer(rotation, names.length);
+    const idx = indexAtPointer(rotation, wheelNames.length);
     if (idx !== lastIdx) { lastIdx = idx; tick(); }
     draw();
     if (t < 1) {
@@ -707,18 +855,22 @@ function spin() {
       rotation = end % TAU;
       spinning = false;
       spinBtn.disabled = false;
-      showWinner(plan.idx);
+      showWinner(plan.idx, plan.forced);
     }
   }
   requestAnimationFrame(frame);
 }
 
-function showWinner(i) {
-  lastWinner = i;
-  winnerNameEl.textContent = names[i];
-  winnerNameEl.style.textDecorationColor = colorFor(i, names.length);
-  called.push(names[i]);
-  save(CALLED_KEY, called);
+// The winner's slice stays on the wheel under the slate; it comes off when the slate closes.
+function showWinner(i, wasChosen = false) {
+  const name = wheelNames[i];
+  winnerNameEl.textContent = name;
+  winnerNameEl.style.textDecorationColor = colorFor(i, wheelNames.length);
+  called.push(name);
+  storeCalled(name);
+  // a "Next call" is used once; the spin after this one is random again
+  if (wasChosen) dbWrite("next call", async () =>
+    must(await db.from("students").update({ next_up: false }).eq("name", name)));
   renderCalled();
   overlay.hidden = false;
   playWinSound();
@@ -726,12 +878,12 @@ function showWinner(i) {
   document.getElementById("okBtn").focus();
 }
 
-function closeWinner(remove) {
+function closeWinner() {
   stopWinSound();
   overlay.hidden = true;
-  if (remove && lastWinner >= 0) removeAt(lastWinner);
-  lastWinner = -1;
+  renderList(); // takes the winner off the wheel
   spinBtn.focus();
+  if (refreshWanted) refreshFromDb();
 }
 
 function chalkDust() {
@@ -754,7 +906,7 @@ function shuffle() {
     const j = Math.floor(Math.random() * (i + 1));
     [names[i], names[j]] = [names[j], names[i]];
   }
-  save(NAMES_KEY, names);
+  storeNames();
   renderList();
 }
 
@@ -768,21 +920,23 @@ input.addEventListener("keydown", e => {
 document.getElementById("shuffleBtn").onclick = shuffle;
 document.getElementById("resetBtn").onclick = () => {
   if (spinning) return;
+  const removed = names.filter(n => !DEFAULT_NAMES.includes(n));
   names = [...DEFAULT_NAMES];
-  save(NAMES_KEY, names);
+  storeNames(removed);
   renderList();
 };
 document.getElementById("clearCalledBtn").onclick = () => {
+  if (spinning) return;
   called = [];
-  save(CALLED_KEY, called);
+  clearCalledStore();
   renderCalled();
+  renderList(); // everyone goes back on the wheel
 };
-document.getElementById("okBtn").onclick = () => closeWinner(false);
-document.getElementById("removeWinnerBtn").onclick = () => closeWinner(true);
-overlay.addEventListener("click", e => { if (e.target === overlay) closeWinner(false); });
+document.getElementById("okBtn").onclick = () => closeWinner();
+overlay.addEventListener("click", e => { if (e.target === overlay) closeWinner(); });
 document.addEventListener("keydown", e => {
   if (!overlay.hidden) {
-    if (e.key === "Escape") closeWinner(false);
+    if (e.key === "Escape") closeWinner();
     return;
   }
   const a = document.activeElement;
@@ -816,6 +970,7 @@ soundOpt.addEventListener("change", () => {
 
 renderList();
 renderCalled();
+dbQueue = dbQueue.then(() => loadFromDb());
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(draw);
 </script>
 </body>

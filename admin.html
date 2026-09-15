@@ -1,0 +1,824 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Who's Next? — Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat+Brush&family=Nunito:wght@600;700;800;900&display=swap">
+<style>
+  :root {
+    --board: #1f3b34;
+    --board-deep: #142823;
+    --panel: #19332d;
+    --chalk: #f1efe6;
+    --chalk-dim: #9fb5ab;
+    --line: rgba(241, 239, 230, .12);
+    --dash: rgba(241, 239, 230, .4);
+    --wood: #8a5a33;
+    --yellow: #f4d35e;
+    --red: #f28f8f;
+    --green: #9ee6b8;
+    --display: "Caveat Brush", "Segoe Print", "Comic Sans MS", cursive;
+    --body: "Nunito", "Segoe UI", system-ui, -apple-system, sans-serif;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body {
+    margin: 0;
+    background: var(--board-deep);
+    color: var(--chalk);
+    font-family: var(--body);
+    font-size: 15px;
+    padding-block: 24px 48px;
+    padding-inline: 16px;
+  }
+  :focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px; }
+  .wrap { max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+
+  /* Header */
+  .top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; }
+  .top-left { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 18px; }
+  h1 { font-family: var(--display); font-weight: 400; font-size: clamp(40px, 5vw, 56px); line-height: 1; margin: 0; }
+  .status { display: inline-flex; align-items: center; gap: 8px; color: var(--chalk-dim); font-size: 14px; }
+  .status::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--chalk-dim); flex: none; }
+  .status.ok::before { background: var(--green); }
+  .status.error { color: var(--red); }
+  .status.error::before { background: var(--red); }
+
+  .btn {
+    font: inherit;
+    font-weight: 800;
+    font-size: 14px;
+    color: var(--chalk);
+    background: transparent;
+    border: 2px solid rgba(241, 239, 230, .45);
+    border-radius: 999px;
+    padding: 6px 15px;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+  }
+  .btn:hover { border-color: var(--chalk); background: rgba(241, 239, 230, .06); }
+  .btn.primary { background: var(--yellow); border-color: var(--yellow); color: var(--board-deep); }
+  .btn.primary:hover { background: #f7dc7b; }
+  .btn.danger { border-color: rgba(242, 143, 143, .6); color: var(--red); }
+  .btn.danger:hover { border-color: var(--red); background: rgba(242, 143, 143, .08); }
+  .btn:disabled { opacity: .45; cursor: default; }
+
+  /* Stat tiles */
+  .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px 16px; }
+  .tile .k { font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--chalk-dim); }
+  .tile .v { font-size: 34px; font-weight: 900; line-height: 1.15; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .tile .sub { font-size: 13px; color: var(--chalk-dim); min-height: 1.3em; overflow-wrap: anywhere; }
+
+  /* Cards */
+  .grid { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+  .card {
+    background: var(--board);
+    border: 1px solid var(--line);
+    border-top: 4px solid var(--wood);
+    border-radius: 10px;
+    padding: 18px 18px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-width: 0;
+  }
+  .card-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+  h2 { margin: 0; font-size: 13px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--chalk-dim); }
+  h2 .count { letter-spacing: .02em; text-transform: none; font-weight: 700; margin-left: 6px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  .add-row { display: flex; gap: 10px; align-items: flex-end; }
+  .add-row input {
+    flex: 1;
+    min-width: 0;
+    background: transparent;
+    border: 0;
+    border-bottom: 2px dashed var(--dash);
+    color: var(--chalk);
+    font: inherit;
+    font-size: 17px;
+    font-weight: 700;
+    padding: 7px 2px;
+    outline: none;
+  }
+  .add-row input::placeholder { color: rgba(241, 239, 230, .38); font-weight: 600; }
+  .add-row input:focus { border-bottom-color: var(--yellow); }
+
+  /* Tables */
+  .table-box { overflow-x: auto; max-height: min(64vh, 640px); overflow-y: auto; border-top: 1px solid var(--line); }
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    position: sticky;
+    top: 0;
+    background: var(--board);
+    text-align: left;
+    font-size: 11.5px;
+    font-weight: 800;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--chalk-dim);
+    padding: 9px 8px;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+    z-index: 1;
+  }
+  td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  tr.off td.name-cell input { color: var(--chalk-dim); }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .dim { color: var(--chalk-dim); }
+  .nowrap { white-space: nowrap; }
+  .empty-row td { padding: 18px 8px; color: var(--chalk-dim); font-style: italic; }
+
+  .order { display: flex; align-items: center; gap: 2px; }
+  .order .pos { min-width: 1.8em; text-align: right; color: var(--chalk-dim); font-variant-numeric: tabular-nums; margin-right: 4px; }
+  .icon-btn {
+    background: none;
+    border: 0;
+    color: var(--chalk-dim);
+    font: inherit;
+    font-size: 15px;
+    line-height: 1;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .icon-btn:hover:not(:disabled) { color: var(--chalk); background: rgba(241, 239, 230, .08); }
+  .icon-btn:disabled { opacity: .25; cursor: default; }
+  .icon-btn.del { font-size: 21px; }
+  .icon-btn.del:hover { color: var(--red); }
+
+  td.name-cell { min-width: 150px; }
+  td.name-cell input {
+    width: 100%;
+    background: transparent;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    color: var(--chalk);
+    font: inherit;
+    font-size: 16px;
+    font-weight: 700;
+    padding: 4px 2px;
+    outline: none;
+  }
+  td.name-cell input:hover { border-bottom-color: var(--line); }
+  td.name-cell input:focus { border-bottom-color: var(--yellow); }
+
+  /* On/off switch */
+  .switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; color: var(--chalk-dim); white-space: nowrap; }
+  .switch input {
+    appearance: none;
+    -webkit-appearance: none;
+    margin: 0;
+    width: 38px;
+    height: 22px;
+    border-radius: 999px;
+    background: rgba(241, 239, 230, .18);
+    position: relative;
+    cursor: pointer;
+    transition: background .15s;
+    flex: none;
+  }
+  .switch input::after {
+    content: "";
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--chalk);
+    transition: transform .15s;
+  }
+  .switch input:checked { background: var(--green); }
+  .switch input:checked::after { transform: translateX(16px); background: var(--board-deep); }
+
+  .note { margin: 0; font-size: 13px; color: var(--chalk-dim); }
+  .note b { color: var(--chalk); }
+
+  /* Next call */
+  .next-card { border-top-color: var(--yellow); }
+  .next-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .next-row select {
+    flex: 1;
+    min-width: 0;
+    max-width: 380px;
+    font: inherit;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--chalk);
+    background: var(--board-deep);
+    border: 2px solid rgba(241, 239, 230, .3);
+    border-radius: 10px;
+    padding: 8px 12px;
+    cursor: pointer;
+  }
+  .next-row select:focus { border-color: var(--yellow); outline: none; }
+  .next-row select.chosen { border-color: var(--yellow); color: var(--yellow); }
+  tr.is-next td { background: rgba(244, 211, 94, .08); }
+  tr.is-next .pos { color: var(--yellow); }
+  .next-tag {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--board-deep);
+    background: var(--yellow);
+    border-radius: 999px;
+    padding: 1px 8px;
+    margin-left: 6px;
+    white-space: nowrap;
+  }
+
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%);
+    max-width: calc(100% - 32px);
+    background: var(--chalk);
+    color: var(--board-deep);
+    font-weight: 800;
+    padding: 10px 18px;
+    border-radius: 999px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .45);
+    z-index: 20;
+  }
+  .toast.error { background: var(--red); }
+
+  .setup {
+    background: var(--panel);
+    border: 1px dashed var(--dash);
+    border-radius: 10px;
+    padding: 18px 20px;
+    line-height: 1.5;
+  }
+  .setup code { font-size: 14px; color: var(--yellow); }
+
+  @media (max-width: 980px) {
+    .grid { grid-template-columns: 1fr; }
+    .table-box { max-height: none; }
+  }
+  @media (max-width: 640px) {
+    .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .tile .v { font-size: 28px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="top-left">
+      <h1>Admin</h1>
+      <span class="status" id="status" role="status">Connecting…</span>
+    </div>
+    <a class="btn" href="index.html">← Back to the wheel</a>
+  </header>
+
+  <div class="setup" id="setup" hidden>
+    <strong>The database isn't connected.</strong><br>
+    Put your Supabase URL and key in <code>config.js</code>, and run <code>supabase-setup.sql</code>
+    in Supabase → SQL Editor. Then reload this page.
+  </div>
+
+  <section class="stats" aria-label="Summary">
+    <div class="tile"><div class="k">Students</div><div class="v" id="stStudents">–</div><div class="sub" id="stStudentsSub"></div></div>
+    <div class="tile"><div class="k">Picks today</div><div class="v" id="stToday">–</div><div class="sub" id="stTodaySub"></div></div>
+    <div class="tile"><div class="k">Last 7 days</div><div class="v" id="stWeek">–</div><div class="sub" id="stWeekSub"></div></div>
+    <div class="tile"><div class="k">All time</div><div class="v" id="stAll">–</div><div class="sub" id="stAllSub"></div></div>
+  </section>
+
+  <section class="card next-card">
+    <div class="card-head">
+      <h2>Next call</h2>
+    </div>
+    <div class="next-row">
+      <select id="nextSelect" aria-label="Who the next spin lands on"></select>
+      <button class="btn" id="nextClearBtn">Back to random</button>
+    </div>
+    <p class="note" id="nextNote"></p>
+  </section>
+
+  <div class="grid">
+    <section class="card">
+      <div class="card-head">
+        <h2>Students <span class="count" id="studentCount"></span></h2>
+        <div class="actions">
+          <button class="btn" id="sortBtn">Sort A–Z</button>
+          <button class="btn" id="exportStudentsBtn">Export CSV</button>
+        </div>
+      </div>
+      <div class="add-row">
+        <input id="nameInput" type="text" placeholder="Add a student…" autocomplete="off" aria-label="Student name">
+        <button class="btn primary" id="addBtn">Add</button>
+      </div>
+      <p class="note">Add several at once with commas. Click a name to rename it. Students switched off stay on the wheel, but the wheel never stops on them.</p>
+      <div class="table-box">
+        <table>
+          <thead>
+            <tr>
+              <th>Order</th>
+              <th>Name</th>
+              <th>Can be picked</th>
+              <th class="num">Called</th>
+              <th>Last called</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="studentRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>Pick history <span class="count" id="historyCount"></span></h2>
+        <div class="actions">
+          <button class="btn" id="exportHistoryBtn">Export CSV</button>
+          <button class="btn danger" id="clearHistoryBtn">Clear history</button>
+        </div>
+      </div>
+      <div class="table-box">
+        <table>
+          <thead>
+            <tr><th>When</th><th>Name</th><th></th></tr>
+          </thead>
+          <tbody id="historyRows"></tbody>
+        </table>
+      </div>
+      <p class="note" id="historyNote" hidden></p>
+    </section>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const db = typeof SUPABASE_URL === "string" && SUPABASE_URL && SUPABASE_KEY && window.supabase
+  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
+  : null;
+
+const PAGE = 1000;         // Supabase returns at most 1000 rows per request
+const HISTORY_SHOWN = 300; // rows drawn in the history table; the CSV has them all
+
+let students = []; // { name, position, pickable, next_up } in wheel order
+let history = [];  // { id, name, called_at, cleared } newest first
+
+const dateTimeFmt = new Intl.DateTimeFormat(undefined, { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+const dateFmt = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", year: "numeric" });
+const timeFmt = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
+
+function must({ data, error }) {
+  if (error) throw error;
+  return data;
+}
+const sameName = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+// --- status + messages ---
+function setStatus(kind, text) {
+  const el = $("status");
+  el.className = `status ${kind}`;
+  el.textContent = text;
+}
+let toastTimer = null;
+function toast(text, isError = false) {
+  const el = $("toast");
+  el.textContent = text;
+  el.classList.toggle("error", isError);
+  el.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.hidden = true; }, isError ? 6000 : 2500);
+}
+
+// --- loading ---
+async function fetchHistory() {
+  const rows = [];
+  for (let from = 0; ; from += PAGE) {
+    const page = must(await db.from("called").select("id, name, called_at, cleared")
+      .order("id", { ascending: false }).range(from, from + PAGE - 1));
+    rows.push(...page);
+    if (page.length < PAGE) return rows;
+  }
+}
+
+async function reload() {
+  if (!db) return;
+  try {
+    const [s, h] = await Promise.all([
+      db.from("students").select("name, position, pickable, next_up").order("position").order("name").then(must),
+      fetchHistory(),
+    ]);
+    students = s;
+    history = h;
+    setStatus("ok", `Connected · updated ${timeFmt.format(new Date())}`);
+    render();
+  } catch (err) {
+    console.error("Supabase: couldn't load", err);
+    setStatus("error", `Couldn't load from the database: ${err.message || err}`);
+  }
+}
+
+// Run a change, report it, then show the database's real state.
+async function act(job, doneText) {
+  try {
+    await job();
+    if (doneText) toast(doneText);
+  } catch (err) {
+    console.error("Supabase: couldn't save", err);
+    toast(`Couldn't save: ${err.message || err}`, true);
+  }
+  await reload();
+}
+
+// --- stats ---
+function pickStats() {
+  const count = new Map();
+  const last = new Map();
+  for (const h of history) { // newest first, so the first time we see a name is its latest pick
+    count.set(h.name, (count.get(h.name) || 0) + 1);
+    if (!last.has(h.name)) last.set(h.name, new Date(h.called_at));
+  }
+  return { count, last };
+}
+
+function startOfDay(d, daysBack = 0) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  x.setDate(x.getDate() - daysBack);
+  return x;
+}
+
+function relativeDay(date) {
+  const days = Math.round((startOfDay(new Date()) - startOfDay(date)) / 86400000);
+  if (days === 0) return `Today, ${timeFmt.format(date)}`;
+  if (days === 1) return "Yesterday";
+  if (days < 7) return `${days} days ago`;
+  return dateFmt.format(date);
+}
+
+function mostCalled(rows, count) {
+  let best = null;
+  for (const [name, n] of count) if (!best || n > best.n) best = { name, n };
+  return best && rows.length ? `Most: ${best.name} (${best.n})` : "";
+}
+
+function countBy(rows) {
+  const m = new Map();
+  for (const r of rows) m.set(r.name, (m.get(r.name) || 0) + 1);
+  return m;
+}
+
+function renderStats() {
+  const pickable = students.filter(s => s.pickable).length;
+  $("stStudents").textContent = students.length;
+  $("stStudentsSub").textContent = students.length ? `${pickable} can be picked` : "";
+
+  const today = startOfDay(new Date());
+  const weekStart = startOfDay(new Date(), 6);
+  const todayRows = history.filter(h => new Date(h.called_at) >= today);
+  const weekRows = history.filter(h => new Date(h.called_at) >= weekStart);
+  $("stToday").textContent = todayRows.length;
+  $("stTodaySub").textContent = todayRows.length ? `Latest: ${todayRows[0].name}` : "No spins yet today";
+  $("stWeek").textContent = weekRows.length;
+  $("stWeekSub").textContent = mostCalled(weekRows, countBy(weekRows));
+  $("stAll").textContent = history.length;
+  $("stAllSub").textContent = history.length
+    ? `Since ${dateFmt.format(new Date(history[history.length - 1].called_at))}`
+    : "";
+}
+
+// --- students table ---
+let renderPending = false;
+function editingName() {
+  const a = document.activeElement;
+  return a && a.classList && a.classList.contains("name-edit");
+}
+
+function renderStudents() {
+  // Don't redraw under someone who is renaming; catch up when they leave the box.
+  if (editingName()) { renderPending = true; return; }
+  renderPending = false;
+
+  const { count, last } = pickStats();
+  const body = $("studentRows");
+  body.innerHTML = "";
+  $("studentCount").textContent = students.length ? `· ${students.length}` : "";
+
+  if (!students.length) {
+    body.innerHTML = `<tr class="empty-row"><td colspan="6">No students yet — add some above.</td></tr>`;
+    return;
+  }
+
+  students.forEach((s, i) => {
+    const tr = document.createElement("tr");
+    tr.classList.toggle("off", !s.pickable);
+
+    const order = document.createElement("td");
+    order.innerHTML = `<div class="order"><span class="pos">${i + 1}</span></div>`;
+    const up = iconButton("↑", `Move ${s.name} up`, () => move(i, -1));
+    const down = iconButton("↓", `Move ${s.name} down`, () => move(i, 1));
+    up.disabled = i === 0;
+    down.disabled = i === students.length - 1;
+    order.firstChild.append(up, down);
+
+    const nameTd = document.createElement("td");
+    nameTd.className = "name-cell";
+    const nameInput = document.createElement("input");
+    nameInput.className = "name-edit";
+    nameInput.value = s.name;
+    nameInput.setAttribute("aria-label", `Rename ${s.name}`);
+    nameInput.addEventListener("keydown", e => {
+      if (e.key === "Enter") nameInput.blur();
+      if (e.key === "Escape") { nameInput.value = s.name; nameInput.blur(); }
+    });
+    nameInput.addEventListener("blur", () => {
+      if (nameInput.value.trim() !== s.name) rename(s.name, nameInput.value, nameInput);
+      else { nameInput.value = s.name; if (renderPending) render(); }
+    });
+    nameTd.append(nameInput);
+
+    const pickTd = document.createElement("td");
+    const label = document.createElement("label");
+    label.className = "switch";
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = s.pickable;
+    box.setAttribute("aria-label", `${s.name} can be picked`);
+    box.onchange = () => setPickable(s.name, box.checked);
+    const state = document.createElement("span");
+    state.textContent = s.pickable ? "Yes" : "No";
+    label.append(box, state);
+    pickTd.append(label);
+    tr.classList.toggle("is-next", s.next_up);
+    if (s.next_up) {
+      const tag = document.createElement("span");
+      tag.className = "next-tag";
+      tag.textContent = "Next";
+      pickTd.append(tag);
+    }
+
+    const calledTd = document.createElement("td");
+    calledTd.className = "num";
+    calledTd.textContent = count.get(s.name) || 0;
+
+    const lastTd = document.createElement("td");
+    lastTd.className = "dim nowrap";
+    lastTd.textContent = last.has(s.name) ? relativeDay(last.get(s.name)) : "Never";
+
+    const delTd = document.createElement("td");
+    const del = iconButton("×", `Delete ${s.name}`, () => removeStudent(s.name));
+    del.classList.add("del");
+    delTd.append(del);
+
+    tr.append(order, nameTd, pickTd, calledTd, lastTd, delTd);
+    body.append(tr);
+  });
+}
+
+function iconButton(text, label, onClick) {
+  const b = document.createElement("button");
+  b.className = "icon-btn";
+  b.textContent = text;
+  b.title = label;
+  b.setAttribute("aria-label", label);
+  b.onclick = onClick;
+  return b;
+}
+
+// --- history table ---
+function renderHistory() {
+  const body = $("historyRows");
+  body.innerHTML = "";
+  $("historyCount").textContent = history.length ? `· ${history.length}` : "";
+  $("clearHistoryBtn").disabled = !history.length;
+
+  if (!history.length) {
+    body.innerHTML = `<tr class="empty-row"><td colspan="3">No picks yet — spin the wheel.</td></tr>`;
+  }
+  for (const h of history.slice(0, HISTORY_SHOWN)) {
+    const tr = document.createElement("tr");
+    const when = document.createElement("td");
+    when.className = "dim nowrap";
+    when.textContent = dateTimeFmt.format(new Date(h.called_at));
+    const name = document.createElement("td");
+    name.textContent = h.name;
+    name.style.fontWeight = "700";
+    const delTd = document.createElement("td");
+    const del = iconButton("×", `Delete this pick of ${h.name}`, () => deletePick(h.id));
+    del.classList.add("del");
+    delTd.append(del);
+    tr.append(when, name, delTd);
+    body.append(tr);
+  }
+  const more = history.length - HISTORY_SHOWN;
+  $("historyNote").hidden = more <= 0;
+  $("historyNote").textContent = `Showing the latest ${HISTORY_SHOWN}. Export CSV to get all ${history.length}.`;
+}
+
+// --- next call ---
+// Called but not yet cleared on the wheel = off the wheel for now.
+function offWheel(name) {
+  return history.some(h => !h.cleared && h.name === name);
+}
+
+function renderNext() {
+  const select = $("nextSelect");
+  const next = students.find(s => s.next_up);
+  select.innerHTML = "";
+  select.append(new Option("Random — the wheel decides", ""));
+  for (const s of students) {
+    const available = s.pickable && !offWheel(s.name);
+    if (!available && s !== next) continue; // only offer students the wheel could land on
+    select.append(new Option(s.name, s.name));
+  }
+  select.value = next ? next.name : "";
+  select.classList.toggle("chosen", !!next);
+  $("nextClearBtn").disabled = !next;
+
+  const note = $("nextNote");
+  note.replaceChildren();
+  const bold = text => Object.assign(document.createElement("b"), { textContent: text });
+  if (!next) {
+    note.append("The wheel picks at random. Choose a student and the next spin will land on them — it still looks random on the wheel.");
+  } else if (offWheel(next.name)) {
+    note.append(bold(next.name), " has already been called and is off the wheel until you press Clear there, so the next spin is random for now.");
+  } else {
+    note.append("The next spin will land on ", bold(next.name), ". After that the wheel goes back to random.");
+  }
+}
+
+function setNext(name) {
+  act(async () => {
+    // one at a time: clear the old choice first, then set the new one
+    must(await db.from("students").update({ next_up: false }).eq("next_up", true));
+    if (name) must(await db.from("students").update({ next_up: true }).eq("name", name));
+  }, name ? `Next spin lands on ${name}` : "Next spin is random");
+}
+
+function render() {
+  renderStats();
+  renderNext();
+  renderStudents();
+  renderHistory();
+}
+
+// --- changes ---
+function addStudents(text) {
+  const incoming = [];
+  const skipped = [];
+  for (const raw of text.split(",")) {
+    const n = raw.trim();
+    if (!n) continue;
+    if (students.some(s => sameName(s.name, n)) || incoming.some(x => sameName(x, n))) skipped.push(n);
+    else incoming.push(n);
+  }
+  if (skipped.length) toast(`Already on the list: ${skipped.join(", ")}`, true);
+  if (!incoming.length) return;
+  const start = students.reduce((m, s) => Math.max(m, s.position), -1) + 1;
+  const rows = incoming.map((name, k) => ({ name, position: start + k, pickable: true }));
+  act(async () => must(await db.from("students").insert(rows)),
+    incoming.length === 1 ? `Added ${incoming[0]}` : `Added ${incoming.length} students`);
+}
+
+function rename(oldName, value, inputEl) {
+  const next = value.trim();
+  if (!next) { inputEl.value = oldName; toast("A name can't be empty.", true); if (renderPending) render(); return; }
+  if (students.some(s => s.name !== oldName && sameName(s.name, next))) {
+    inputEl.value = oldName;
+    toast(`${next} is already on the list.`, true);
+    if (renderPending) render();
+    return;
+  }
+  act(async () => {
+    must(await db.from("students").update({ name: next }).eq("name", oldName));
+    // keep their pick history and stats under the new name
+    must(await db.from("called").update({ name: next }).eq("name", oldName));
+  }, `Renamed ${oldName} to ${next}`);
+}
+
+function setPickable(name, pickable) {
+  act(async () => must(await db.from("students").update({ pickable }).eq("name", name)),
+    pickable ? `${name} can be picked again` : `${name} will never be picked`);
+}
+
+// Save the whole order as 0, 1, 2… so positions never collide.
+function saveOrder(list, doneText) {
+  const rows = list.map((s, position) => ({ name: s.name, position }));
+  act(async () => must(await db.from("students").upsert(rows, { onConflict: "name" })), doneText);
+}
+
+function move(i, dir) {
+  const j = i + dir;
+  if (j < 0 || j >= students.length) return;
+  const list = [...students];
+  [list[i], list[j]] = [list[j], list[i]];
+  students = list; // show it straight away
+  renderStudents();
+  saveOrder(list);
+}
+
+function sortAZ() {
+  const list = [...students].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+  saveOrder(list, "Sorted A–Z");
+}
+
+function removeStudent(name) {
+  act(async () => must(await db.from("students").delete().eq("name", name)),
+    `Deleted ${name} (their pick history is kept)`);
+}
+
+function deletePick(id) {
+  act(async () => must(await db.from("called").delete().eq("id", id)), "Pick deleted");
+}
+
+function clearHistory() {
+  if (!history.length) return;
+  if (!confirm(`Delete all ${history.length} picks from the history? This can't be undone.`)) return;
+  act(async () => must(await db.from("called").delete().gt("id", 0)), "History cleared");
+}
+
+// --- CSV export ---
+function csvCell(v) {
+  let s = String(v ?? "");
+  if (/^[=+\-@]/.test(s)) s = "'" + s; // stop spreadsheets reading a name as a formula
+  return `"${s.replace(/"/g, '""')}"`;
+}
+function downloadCsv(filename, rows) {
+  // BOM so Excel reads Khmer and other non-English names correctly
+  const csv = "﻿" + rows.map(r => r.map(csvCell).join(",")).join("\r\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+const pad = n => String(n).padStart(2, "0");
+const isoDate = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const isoTime = d => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+function exportStudents() {
+  const { count, last } = pickStats();
+  const rows = [["Order", "Name", "Can be picked", "Times called", "Last called"]];
+  students.forEach((s, i) => {
+    const l = last.get(s.name);
+    rows.push([i + 1, s.name, s.pickable ? "Yes" : "No", count.get(s.name) || 0, l ? `${isoDate(l)} ${isoTime(l)}` : ""]);
+  });
+  downloadCsv(`class-list-${isoDate(new Date())}.csv`, rows);
+}
+
+function exportHistory() {
+  const rows = [["Date", "Time", "Name"]];
+  for (const h of [...history].reverse()) {
+    const d = new Date(h.called_at);
+    rows.push([isoDate(d), isoTime(d), h.name]);
+  }
+  downloadCsv(`pick-history-${isoDate(new Date())}.csv`, rows);
+}
+
+// --- wiring ---
+const input = $("nameInput");
+$("addBtn").onclick = () => { addStudents(input.value); input.value = ""; input.focus(); };
+input.addEventListener("keydown", e => {
+  if (e.key === "Enter") { addStudents(input.value); input.value = ""; }
+});
+$("sortBtn").onclick = sortAZ;
+$("exportStudentsBtn").onclick = exportStudents;
+$("exportHistoryBtn").onclick = exportHistory;
+$("clearHistoryBtn").onclick = clearHistory;
+$("nextSelect").onchange = e => setNext(e.target.value);
+$("nextClearBtn").onclick = () => setNext("");
+
+if (!db) {
+  setStatus("error", "Not connected");
+  $("setup").hidden = false;
+  document.querySelectorAll(".card button, .card input, .card select").forEach(el => { el.disabled = true; });
+} else {
+  // Live: new spins on the wheel and edits from another tab show up here by themselves.
+  let t = null;
+  const soon = () => { clearTimeout(t); t = setTimeout(reload, 400); };
+  db.channel("admin")
+    .on("postgres_changes", { event: "*", schema: "public", table: "students" }, soon)
+    .on("postgres_changes", { event: "*", schema: "public", table: "called" }, soon)
+    .subscribe();
+  window.addEventListener("focus", soon);
+  reload();
+}
+</script>
+</body>
+</html>

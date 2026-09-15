@@ -772,8 +772,33 @@ const WIN_SOUNDS = ["win-sound.mp3", "win-sound-2.mp3", "win-sound-3.mp3"].map(s
 function playWinSound() {
   if (!soundOpt.checked) return;
   const s = WIN_SOUNDS[Math.floor(Math.random() * WIN_SOUNDS.length)];
+  s.muted = false;
   s.currentTime = 0;
-  s.play().catch(() => {});
+  s.play().catch(err => {
+    console.warn("Winner sound didn't play:", err);
+    if (err && err.name === "NotAllowedError") {
+      noteEl.textContent = "The browser blocked the winner sound — click anywhere on the page, then spin again.";
+    }
+  });
+}
+
+// Browsers only let a page start sound right after a click or key press, and the winner
+// sound plays 15+ seconds after Spin is pressed. Starting every sound silently during the
+// press unlocks them, so the winner sound is still allowed when the wheel stops.
+let soundsUnlocked = false;
+function unlockSounds() {
+  if (soundsUnlocked || !soundOpt.checked) return;
+  soundsUnlocked = true;
+  WIN_SOUNDS.forEach(s => {
+    s.muted = true;
+    s.play()
+      .then(() => { s.pause(); s.currentTime = 0; s.muted = false; })
+      .catch(() => { s.muted = false; soundsUnlocked = false; });
+  });
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+  } catch (e) {}
 }
 function stopWinSound() {
   WIN_SOUNDS.forEach(s => { s.pause(); s.currentTime = 0; });
@@ -819,6 +844,7 @@ async function fetchNextUp() {
 async function spin() {
   if (spinning || !overlay.hidden || dbLoading) return;
   if (!names.length) { noteEl.textContent = "Add some students to the list first."; return; }
+  unlockSounds(); // must happen now, while the click/key press still counts
   spinning = true; // hold the wheel still while we check for a "Next call"
   spinBtn.disabled = true;
   const nextUp = await fetchNextUp();
